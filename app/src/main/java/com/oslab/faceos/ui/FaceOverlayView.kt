@@ -7,15 +7,14 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.View
-import com.oslab.faceos.ml.FaceDetection
+import com.oslab.faceos.ml.AnalyzedFace
 import kotlin.math.min
 
 /**
- * 人脸框 / 关键点叠加层。
+ * 人脸框 / 关键点 / 身份 / 活体结果叠加层。
  *
- * 分析帧与预览用同样的 4:3 比例，所以这里用 FIT_CENTER 做等比映射：
- *   scale = min(viewW / imageW, viewH / imageH)
- * 前摄预览默认是镜像的，因此 x 方向需要翻转才能和画面里的人脸对齐。
+ * 颜色约定：
+ *   绿色 = 活体通过；红色 = 判定为攻击；黄色 = 有检测但未做活体（多人脸时非最大脸）
  */
 class FaceOverlayView @JvmOverloads constructor(
     context: Context,
@@ -23,17 +22,15 @@ class FaceOverlayView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : View(context, attrs, defStyleAttr) {
 
-    private var detections: List<FaceDetection> = emptyList()
+    private var faces: List<AnalyzedFace> = emptyList()
     private var imageW = 0
     private var imageH = 0
 
-    /** 前摄预览是否镜像显示 */
     var mirrored: Boolean = true
 
     private val boxPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 4f
-        color = Color.parseColor("#00E676")
     }
     private val kpPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
@@ -41,32 +38,35 @@ class FaceOverlayView @JvmOverloads constructor(
     }
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
-        textSize = 32f
+        textSize = 30f
         isFakeBoldText = true
+        setShadowLayer(5f, 0f, 0f, Color.BLACK)
+    }
+    private val subTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#E0E0E0")
+        textSize = 24f
         setShadowLayer(4f, 0f, 0f, Color.BLACK)
     }
 
-    fun update(list: List<FaceDetection>, width: Int, height: Int) {
-        detections = list
+    fun update(list: List<AnalyzedFace>, width: Int, height: Int) {
+        faces = list
         imageW = width
         imageH = height
         invalidate()
     }
 
     fun clear() {
-        detections = emptyList()
+        faces = emptyList()
         invalidate()
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        if (imageW <= 0 || imageH <= 0 || detections.isEmpty()) return
+        if (imageW <= 0 || imageH <= 0 || faces.isEmpty()) return
 
         val scale = min(width.toFloat() / imageW, height.toFloat() / imageH)
-        val drawnW = imageW * scale
-        val drawnH = imageH * scale
-        val dx = (width - drawnW) / 2f
-        val dy = (height - drawnH) / 2f
+        val dx = (width - imageW * scale) / 2f
+        val dy = (height - imageH * scale) / 2f
 
         fun mapX(x: Float): Float {
             val vx = dx + x * scale
@@ -75,29 +75,36 @@ class FaceOverlayView @JvmOverloads constructor(
 
         fun mapY(y: Float): Float = dy + y * scale
 
-        for (det in detections) {
+        for (face in faces) {
+            val det = face.detection
             val left = mapX(det.x1)
             val right = mapX(det.x2)
-            val rect = RectF(
-                min(left, right),
-                mapY(det.y1),
-                maxOf(left, right),
-                mapY(det.y2)
-            )
+            val rect = RectF(min(left, right), mapY(det.y1), maxOf(left, right), mapY(det.y2))
+
+            boxPaint.color = when {
+                face.liveness == null -> Color.parseColor("#FFC107")
+                face.liveness.live -> Color.parseColor("#00E676")
+                else -> Color.parseColor("#FF5252")
+            }
             canvas.drawRect(rect, boxPaint)
 
-            // 置信度标签
-            canvas.drawText(
-                String.format(" %.2f ", det.score),
-                rect.left,
-                (rect.top - 8f).coerceAtLeast(34f),
-                textPaint
-            )
-
-            // 5 个关键点
-            for (kp in det.keypoints) {
-                canvas.drawCircle(mapX(kp.x), mapY(kp.y), 7f, kpPaint)
+            for (kp in face.keypoints) {
+                canvas.drawCircle(mapX(kp.x), mapY(kp.y), 6f, kpPaint)
             }
+
+            val title = buildString {
+                append(face.identity ?: "未知")
+                if (face.identity != null) append("  ${"%.2f".format(face.similarity)}")
+            }
+            canvas.drawText(" $title ", rect.left, (rect.top - 10f).coerceAtLeast(34f), textPaint)
+
+            val sub = buildString {
+                append("det ${"%.2f".format(det.score)}")
+                face.liveness?.let {
+                    append("  ${it.label} ${"%.2f".format(it.score)}")
+                }
+            }
+            canvas.drawText(" $sub ", rect.left, (rect.bottom + 28f).coerceAtMost(height - 8f), subTextPaint)
         }
     }
 }

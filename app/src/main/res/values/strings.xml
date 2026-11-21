@@ -2,4 +2,7 @@
     <string name="app_name">FaceOS</string>
     <string name="app_subtitle">基于 Android 的轻量化 AI 人脸分析 · 操作系统综合实验</string>
     <string name="status_loading">正在初始化…</string>
+    <string name="btn_register">注册</string>
+    <string name="btn_clear">清空</string>
+    <string name="gallery_empty">人脸库：0 人</string>
 </resources>
