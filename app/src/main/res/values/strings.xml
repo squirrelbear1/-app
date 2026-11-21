@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">FaceOS</string>
     <string name="app_subtitle">基于 Android 的轻量化 AI 人脸分析 · 操作系统综合实验</string>
+    <string name="status_loading">正在初始化…</string>
 </resources>

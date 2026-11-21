@@ -44,10 +44,18 @@ FaceOSApp/
 ## 当前进度
 
 - [x] 工程骨架 + 环境自检页（显示机型、ABI、PID、线程名）
-- [ ] CameraX 前摄预览
-- [ ] SCRFD 人脸检测
+- [x] CameraX 前摄预览
+- [x] SCRFD-500M-KPS 人脸检测（ONNX Runtime，含 5 关键点、NMS、延迟/FPS 显示）
 - [ ] EdgeFace 识别
 - [ ] MiniFASNetV2 活体
 - [ ] 双进程 IPC / 线程池 / Semaphore
 - [ ] 系统状态页
 - [ ] 优化对照实验
+
+## 模型
+
+| 文件 | 用途 | 大小 |
+|---|---|---|
+| `assets/models/det_500m.onnx` | SCRFD-500M-KPS 人脸检测（5 关键点） | 2.41 MB |
+| `assets/models/w600k_mbf.onnx` | MobileFaceNet 人脸特征提取（备用/对照） | 12.99 MB |
+
