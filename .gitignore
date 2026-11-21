@@ -1,0 +1,25 @@
+# Gradle 构建产物
+.gradle/
+build/
+app/build/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# 本地环境配置（含本机 SDK 绝对路径，不能提交）
+local.properties
+
+# IDE 配置
+.idea/
+*.iml
+*.hprof
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 打包产物
+*.apk
+*.aab
+*.ap_
+*.dex
