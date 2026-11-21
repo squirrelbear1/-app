@@ -14,18 +14,32 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <TextView
+    <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|start"
         android:layout_margin="12dp"
         android:background="#99000000"
+        android:orientation="vertical"
         android:paddingHorizontal="10dp"
-        android:paddingVertical="6dp"
-        android:text="@string/app_name"
-        android:textColor="#FFFFFF"
-        android:textSize="16sp"
-        android:textStyle="bold" />
+        android:paddingVertical="6dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/app_name"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvMode"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/mode_dual"
+            android:textColor="#8AB4F8"
+            android:textSize="12sp" />
+    </LinearLayout>
 
     <LinearLayout
         android:layout_width="wrap_content"
@@ -36,44 +50,27 @@
 
         <Button
             android:id="@+id/btnRegister"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:backgroundTint="#CC1E88E5"
-            android:minWidth="0dp"
-            android:minHeight="0dp"
-            android:paddingHorizontal="16dp"
-            android:paddingVertical="8dp"
-            android:text="@string/btn_register"
-            android:textColor="#FFFFFF"
-            android:textSize="14sp" />
+            style="@style/Widget.FaceOS.SmallButton"
+            android:text="@string/btn_register" />
 
         <Button
             android:id="@+id/btnClear"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:backgroundTint="#CC616161"
-            android:minWidth="0dp"
-            android:minHeight="0dp"
-            android:paddingHorizontal="16dp"
-            android:paddingVertical="8dp"
-            android:text="@string/btn_clear"
-            android:textColor="#FFFFFF"
-            android:textSize="14sp" />
-    </LinearLayout>
+            style="@style/Widget.FaceOS.SmallButton"
+            android:layout_marginStart="6dp"
+            android:text="@string/btn_clear" />
 
-    <TextView
-        android:id="@+id/tvGallery"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|end"
-        android:layout_margin="12dp"
-        android:background="#99000000"
-        android:paddingHorizontal="10dp"
-        android:paddingVertical="4dp"
-        android:text="@string/gallery_empty"
-        android:textColor="#FFFFFF"
-        android:textSize="12sp" />
+        <Button
+            android:id="@+id/btnDebug"
+            style="@style/Widget.FaceOS.SmallButton"
+            android:layout_marginStart="6dp"
+            android:text="@string/btn_debug" />
+
+        <Button
+            android:id="@+id/btnMode"
+            style="@style/Widget.FaceOS.SmallButton"
+            android:layout_marginStart="6dp"
+            android:text="@string/btn_mode" />
+    </LinearLayout>
 
     <TextView
         android:id="@+id/tvStatus"

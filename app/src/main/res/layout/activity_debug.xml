@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#111318"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="14dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/debug_title"
+            android:textColor="#FFFFFF"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvDebug"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="#1B1F26"
+            android:fontFamily="monospace"
+            android:padding="12dp"
+            android:textColor="#D0D4DC"
+            android:textSize="12sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/debug_workers"
+            android:textColor="#FFFFFF" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnWorkers1"
+                style="@style/Widget.FaceOS.SmallButton"
+                android:text="1" />
+
+            <Button
+                android:id="@+id/btnWorkers2"
+                style="@style/Widget.FaceOS.SmallButton"
+                android:layout_marginStart="8dp"
+                android:text="2" />
+
+            <Button
+                android:id="@+id/btnWorkers4"
+                style="@style/Widget.FaceOS.SmallButton"
+                android:layout_marginStart="8dp"
+                android:text="4" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/debug_permits"
+            android:textColor="#FFFFFF" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnPermits1"
+                style="@style/Widget.FaceOS.SmallButton"
+                android:text="1" />
+
+            <Button
+                android:id="@+id/btnPermits2"
+                style="@style/Widget.FaceOS.SmallButton"
+                android:layout_marginStart="8dp"
+                android:text="2" />
+
+            <Button
+                android:id="@+id/btnPermits4"
+                style="@style/Widget.FaceOS.SmallButton"
+                android:layout_marginStart="8dp"
+                android:text="4" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnReset"
+                style="@style/Widget.FaceOS.SmallButton"
+                android:text="@string/debug_reset" />
+
+            <Button
+                android:id="@+id/btnBack"
+                style="@style/Widget.FaceOS.SmallButton"
+                android:layout_marginStart="8dp"
+                android:text="@string/debug_back" />
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>

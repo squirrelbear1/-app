@@ -2,7 +2,14 @@
     <string name="app_name">FaceOS</string>
     <string name="app_subtitle">基于 Android 的轻量化 AI 人脸分析 · 操作系统综合实验</string>
     <string name="status_loading">正在初始化…</string>
+    <string name="mode_dual">双进程</string>
     <string name="btn_register">注册</string>
     <string name="btn_clear">清空</string>
-    <string name="gallery_empty">人脸库：0 人</string>
+    <string name="btn_debug">状态</string>
+    <string name="btn_mode">模式</string>
+    <string name="debug_title">系统运行状态</string>
+    <string name="debug_workers">推理工作线程数（CPU 调度对照）</string>
+    <string name="debug_permits">信号量许可数（在途任务上限）</string>
+    <string name="debug_reset">重置统计</string>
+    <string name="debug_back">返回</string>
 </resources>

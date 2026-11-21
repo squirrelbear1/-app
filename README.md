@@ -48,9 +48,15 @@ FaceOSApp/
 - [x] SCRFD-500M-KPS 人脸检测（ONNX Runtime，含 5 关键点、NMS、延迟/FPS 显示）
 - [x] EdgeFace-XXS 人脸识别（对齐 + 特征 + 余弦匹配 + 注册/删除）
 - [x] MiniFASNetV2 活体检测（PAD）
-- [ ] 双进程 IPC / 线程池 / Semaphore
-- [ ] 系统状态页
+- [x] 双进程 Binder IPC（Messenger，:infer 进程）+ 线程池 + Semaphore 限流 + 自动重连
+- [x] 系统运行状态 / 调试页（进程/线程/IPC/信号量/队列/耗时）
 - [ ] 优化对照实验
+
+## 进程模型
+
+- 主进程：相机采集 + UI（camera-analysis 线程）
+- \:infer\ 进程：三模型推理（infer-dispatch 调度 + infer-worker-N 线程池）
+- 通过 Messenger（Binder）传递帧与结果；可在界面「模式」按钮切换单/双进程对照
 
 ## 模型
 
