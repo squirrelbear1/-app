@@ -14,6 +14,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <!-- 左上角：应用名 + 当前模式 -->
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -41,55 +42,68 @@
             android:textSize="12sp" />
     </LinearLayout>
 
+    <!-- 底部：状态信息 + 操作按钮（放在拇指可及区域） -->
     <LinearLayout
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="top|end"
-        android:layout_margin="12dp"
-        android:orientation="horizontal">
-
-        <Button
-            android:id="@+id/btnRegister"
-            style="@style/Widget.FaceOS.SmallButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/btn_register" />
-
-        <Button
-            android:id="@+id/btnClear"
-            style="@style/Widget.FaceOS.SmallButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:text="@string/btn_clear" />
-
-        <Button
-            android:id="@+id/btnDebug"
-            style="@style/Widget.FaceOS.SmallButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:text="@string/btn_debug" />
-
-        <Button
-            android:id="@+id/btnMode"
-            style="@style/Widget.FaceOS.SmallButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:text="@string/btn_mode" />
-    </LinearLayout>
-
-    <TextView
-        android:id="@+id/tvStatus"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
         android:background="#CC000000"
-        android:fontFamily="monospace"
-        android:padding="14dp"
-        android:text="@string/status_loading"
-        android:textColor="#FFFFFF"
-        android:textSize="12sp" />
+        android:orientation="vertical"
+        android:paddingHorizontal="12dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="20dp">
+
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:text="@string/status_loading"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnRegister"
+                style="@style/Widget.FaceOS.SmallButton"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="@string/btn_register" />
+
+            <Button
+                android:id="@+id/btnClear"
+                style="@style/Widget.FaceOS.SmallButton"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="@string/btn_clear" />
+
+            <Button
+                android:id="@+id/btnDebug"
+                style="@style/Widget.FaceOS.SmallButton"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="@string/btn_debug" />
+
+            <Button
+                android:id="@+id/btnMode"
+                style="@style/Widget.FaceOS.SmallButton"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="@string/btn_mode" />
+        </LinearLayout>
+    </LinearLayout>
 
 </FrameLayout>

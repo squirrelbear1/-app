@@ -5,6 +5,8 @@ import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.Process
 import android.util.Log
 import android.util.Size
@@ -60,11 +62,19 @@ class MainActivity : AppCompatActivity() {
     private var analyzer: FrameAnalyzer? = null
     private var client: InferenceClient? = null
     private var engine: InferenceEngine? = null
-    private var localExecutor: ExecutorService? = null
+    private var localSink: LocalFrameSink? = null
     private var mode = MODE_DUAL
     private var cameraStarted = false
     private var lastUiUpdate = 0L
     private var lastResult: InferenceResult? = null
+
+    private val statsHandler = Handler(Looper.getMainLooper())
+    private val statsLogger = object : Runnable {
+        override fun run() {
+            logStats()
+            statsHandler.postDelayed(this, 2000)
+        }
+    }
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -121,7 +131,6 @@ class MainActivity : AppCompatActivity() {
             lifecycleScope.launch {
                 val e = withContext(Dispatchers.IO) { InferenceEngine(applicationContext) }
                 engine = e
-                localExecutor = Executors.newSingleThreadExecutor { r -> Thread(r, "infer-local") }
                 startCamera()
             }
         }
@@ -135,7 +144,7 @@ class MainActivity : AppCompatActivity() {
         val sink: FrameSink = if (mode == MODE_DUAL) {
             client!!
         } else {
-            LocalFrameSink(engine!!, localExecutor!!) { result -> onInferenceResult(result) }
+            LocalFrameSink(engine!!) { result -> onInferenceResult(result) }.also { localSink = it }
         }
         val frameAnalyzer = FrameAnalyzer(sink)
         analyzer = frameAnalyzer
@@ -333,12 +342,54 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    override fun onResume() {
+        super.onResume()
+        statsHandler.removeCallbacks(statsLogger)
+        statsHandler.post(statsLogger)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        statsHandler.removeCallbacks(statsLogger)
+    }
+
+    /** 每 2s 输出一行结构化统计，供 adb logcat 抓取做实验数据分析 */
+    private fun logStats() {
+        val svc = client?.latestStats
+        val r = lastResult
+        Log.i(
+            "FaceOS-STATS",
+            "mode=" + (if (mode == MODE_DUAL) "dual" else "single") +
+                " workers=" + (svc?.workers ?: -1) +
+                " permits=" + (svc?.permitsTotal ?: -1) +
+                " queue=" + (svc?.queueLength ?: -1) + "/" + (svc?.queueCapacity ?: -1) +
+                " proc=" + (svc?.processed ?: -1) +
+                " drop=" + (svc?.dropped ?: -1) +
+                " det=" + (svc?.avgDetMs ?: -1) +
+                " live=" + (svc?.avgLiveMs ?: -1) +
+                " rec=" + (svc?.avgRecMs ?: -1) +
+                " total=" + (svc?.avgTotalMs ?: -1) +
+                " fps=" + "%.1f".format(analyzer?.fps ?: 0f) +
+                " sub=" + (client?.submitted?.get() ?: -1) +
+                " recv=" + (client?.received?.get() ?: -1) +
+                " ipc=" + (client?.avgIpcMs ?: -1) +
+                " faces=" + (r?.faceCount ?: -1) +
+                " ldet=" + (r?.detMs ?: -1) +
+                " llive=" + (r?.liveMs ?: -1) +
+                " lrec=" + (r?.recMs ?: -1) +
+                " ltotal=" + (r?.totalMs ?: -1) +
+                " lproc=" + (localSink?.processedCount ?: -1) +
+                " ldrop=" + (localSink?.droppedCount ?: -1) +
+                " gallery=" + (if (mode == MODE_DUAL) (client?.galleryCount() ?: 0) else (engine?.gallery?.size() ?: 0))
+        )
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         DebugHub.provider = null
         DebugHub.actions = null
         client?.unbind()
-        localExecutor?.shutdown()
+        localSink?.shutdown()
         engine?.close()
         cameraExecutor.shutdown()
     }

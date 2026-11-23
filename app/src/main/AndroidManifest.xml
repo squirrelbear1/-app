@@ -28,6 +28,15 @@
             android:exported="false"
             android:screenOrientation="portrait" />
 
+        <receiver
+            android:name=".debug.TestControlReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.oslab.faceos.debug.CONFIG" />
+                <action android:name="com.oslab.faceos.debug.RESET" />
+            </intent-filter>
+        </receiver>
+
         <!-- 独立推理服务进程：与主进程分离，验证 Binder IPC / 故障隔离 -->
         <service
             android:name=".infer.InferenceService"

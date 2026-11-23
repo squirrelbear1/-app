@@ -5,7 +5,10 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import com.oslab.faceos.infer.InferenceEngine
 import com.oslab.faceos.ipc.InferenceResult
-import java.util.concurrent.ExecutorService
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.RejectedExecutionHandler
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 /** 帧的消费者：双进程模式下是 Binder 客户端，单进程模式下是本地推理引擎 */
@@ -110,19 +113,48 @@ class FrameAnalyzer(
     }
 }
 
-/** 单进程基线模式：直接在主进程的推理线程上跑 [InferenceEngine] */
+/**
+ * 单进程基线模式：在主进程的推理线程上跑 [InferenceEngine]。
+ *
+ * 注意：必须使用**有界队列 + 丢弃策略**。最初用无界线程池排队，
+ * 相机 25fps 而推理仅 ~10fps，每帧 691KB，队列无限增长，
+ * 真机运行几分钟后主进程直接 OOM（实测：target footprint 268MB / 256MB 上限）。
+ * 这本身也是"系统侧优化：限制队列深度/合理跳帧"的实证。
+ */
 class LocalFrameSink(
     private val engine: InferenceEngine,
-    private val executor: ExecutorService,
     private val onResult: (InferenceResult) -> Unit
 ) : FrameSink {
+
+    private val processed = AtomicLong()
+    private val dropped = AtomicLong()
+
+    private val pool = ThreadPoolExecutor(
+        1, 1, 30, TimeUnit.SECONDS,
+        ArrayBlockingQueue(1),
+        { r -> Thread(r, "infer-local").apply { isDaemon = true } },
+        RejectedExecutionHandler { _, _ -> dropped.incrementAndGet() }
+    )
+
+    val processedCount: Long get() = processed.get()
+    val droppedCount: Long get() = dropped.get()
+
     override fun submit(rgba: ByteArray, width: Int, height: Int, rotation: Int, seq: Long) {
-        executor.execute {
-            try {
-                onResult(engine.analyze(rgba, width, height, rotation, seq))
-            } catch (t: Throwable) {
-                Log.w("LocalFrameSink", "inference failed: ${t.javaClass.simpleName}")
+        try {
+            pool.execute {
+                try {
+                    onResult(engine.analyze(rgba, width, height, rotation, seq))
+                    processed.incrementAndGet()
+                } catch (t: Throwable) {
+                    Log.w("LocalFrameSink", "inference failed: ${t.javaClass.simpleName}")
+                }
             }
+        } catch (t: Throwable) {
+            dropped.incrementAndGet()
         }
+    }
+
+    fun shutdown() {
+        pool.shutdownNow()
     }
 }
