@@ -91,6 +91,12 @@ class InferenceService : Service() {
     @Volatile
     private var cpuPct = -1f
 
+    // ---- 线程名缓存：Thread.getAllStackTraces 代价高，5 s 更新一次即可 ----
+    @Volatile
+    private var cachedInferThreads: Array<String> = emptyArray()
+    @Volatile
+    private var cachedThreadsAtMs = 0L
+
     private data class FrameTask(
         val data: ByteArray,
         val width: Int,
@@ -400,14 +406,20 @@ class InferenceService : Service() {
         lastCpuTimeMs = cpuMs
         lastCpuAtMs = nowMs
 
-        val inferThreads = try {
-            Thread.getAllStackTraces().keys
-                .filter { it.isAlive && it.name.startsWith("infer-") }
-                .map { it.name }
-                .sorted()
-                .toTypedArray()
-        } catch (t: Throwable) {
-            emptyArray()
+        val inferThreads = if (nowMs - cachedThreadsAtMs > 5000 || cachedInferThreads.isEmpty()) {
+            cachedInferThreads = try {
+                Thread.getAllStackTraces().keys
+                    .filter { it.isAlive && it.name.startsWith("infer-") }
+                    .map { it.name }
+                    .sorted()
+                    .toTypedArray()
+            } catch (t: Throwable) {
+                emptyArray()
+            }
+            cachedThreadsAtMs = nowMs
+            cachedInferThreads
+        } else {
+            cachedInferThreads
         }
         return StatsSnapshot(
             servicePid = Process.myPid(),
