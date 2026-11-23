@@ -27,7 +27,9 @@ object DebugHub {
     class Actions(
         val setWorkers: (Int) -> Unit,
         val setPermits: (Int) -> Unit,
-        val resetStats: () -> Unit
+        val resetStats: () -> Unit,
+        val setVariant: (String) -> Unit,
+        val setDetSize: (Int) -> Unit
     )
 
     @Volatile

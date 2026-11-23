@@ -29,10 +29,11 @@ class ScrfdDetector(
     private val inputSize: Int = 640,
     private val scoreThreshold: Float = 0.5f,
     private val nmsThreshold: Float = 0.4f,
-    intraOpThreads: Int = 2
+    intraOpThreads: Int = 2,
+    private val assetName: String = DEFAULT_ASSET
 ) {
     companion object {
-        private const val MODEL_ASSET = "models/det_500m.onnx"
+        const val DEFAULT_ASSET = "models/det_500m.onnx"
         private val FEAT_STRIDE = intArrayOf(8, 16, 32)
         private const val NUM_ANCHORS = 2
     }
@@ -51,7 +52,7 @@ class ScrfdDetector(
 
     init {
         val t0 = System.currentTimeMillis()
-        val bytes = context.assets.open(MODEL_ASSET).use { it.readBytes() }
+        val bytes = context.assets.open(assetName).use { it.readBytes() }
         val opts = OrtSession.SessionOptions().apply {
             setIntraOpNumThreads(intraOpThreads)
             setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)

@@ -50,7 +50,7 @@ FaceOSApp/
 - [x] MiniFASNetV2 活体检测（PAD）
 - [x] 双进程 Binder IPC（Messenger，:infer 进程）+ 线程池 + Semaphore 限流 + 自动重连
 - [x] 系统运行状态 / 调试页（进程/线程/IPC/信号量/队列/耗时）
-- [ ] 优化对照实验
+- [x] 优化对照实验（模型侧：INT8/FP16 量化评估、检测输入 640→480；系统侧：线程/许可/队列/单双进程）
 
 ## 进程模型
 

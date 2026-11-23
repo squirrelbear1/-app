@@ -19,11 +19,12 @@ import kotlin.math.sqrt
  */
 class EdgeFaceRecognizer(
     context: Context,
-    intraOpThreads: Int = 2
+    intraOpThreads: Int = 2,
+    private val assetName: String = DEFAULT_ASSET
 ) {
     companion object {
         const val EMBEDDING_SIZE = 512
-        private const val MODEL_ASSET = "models/edgeface_xxs.onnx"
+        const val DEFAULT_ASSET = "models/edgeface_xxs.onnx"
         private const val INPUT_SIZE = 112
     }
 
@@ -36,7 +37,7 @@ class EdgeFaceRecognizer(
 
     init {
         val t0 = System.currentTimeMillis()
-        val bytes = context.assets.open(MODEL_ASSET).use { it.readBytes() }
+        val bytes = context.assets.open(assetName).use { it.readBytes() }
         val opts = OrtSession.SessionOptions().apply {
             setIntraOpNumThreads(intraOpThreads)
             setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)

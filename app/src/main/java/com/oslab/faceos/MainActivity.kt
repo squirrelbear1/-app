@@ -338,7 +338,13 @@ class MainActivity : AppCompatActivity() {
         DebugHub.actions = DebugHub.Actions(
             setWorkers = { n -> client?.setWorkers(n) },
             setPermits = { n -> client?.setPermits(n) },
-            resetStats = { client?.resetStats() }
+            resetStats = { client?.resetStats() },
+            setVariant = { v ->
+                if (mode == MODE_DUAL) client?.setVariant(v) else engine?.reload(v)
+            },
+            setDetSize = { n ->
+                if (mode == MODE_DUAL) client?.setDetSize(n) else engine?.reloadDetSize(n)
+            }
         )
     }
 
@@ -361,7 +367,9 @@ class MainActivity : AppCompatActivity() {
             "FaceOS-STATS",
             "mode=" + (if (mode == MODE_DUAL) "dual" else "single") +
                 " workers=" + (svc?.workers ?: -1) +
+                " variant=" + (svc?.variant ?: (engine?.variant ?: "?")) +
                 " permits=" + (svc?.permitsTotal ?: -1) +
+                " detsize=" + (svc?.detInputSize ?: (engine?.detInputSize ?: -1)) +
                 " queue=" + (svc?.queueLength ?: -1) + "/" + (svc?.queueCapacity ?: -1) +
                 " proc=" + (svc?.processed ?: -1) +
                 " drop=" + (svc?.dropped ?: -1) +

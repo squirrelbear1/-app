@@ -252,6 +252,17 @@ class InferenceClient(
 
     fun resetStats() = sendArg(Msg.RESET_STATS, 0)
 
+    fun setDetSize(size: Int) = sendArg(Msg.SET_DET_SIZE, size)
+
+    fun setVariant(variant: String) {
+        val m = serviceMessenger ?: return
+        try {
+            m.send(Message.obtain(null, Msg.SET_VARIANT).apply { data = Bundle().apply { putString(Msg.K_VARIANT, variant) } })
+        } catch (e: RemoteException) {
+            // ignore
+        }
+    }
+
     private fun sendArg(what: Int, value: Int) {
         val m = serviceMessenger ?: return
         try {

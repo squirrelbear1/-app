@@ -86,6 +86,23 @@ class InferenceService : Service() {
                 Msg.SET_WORKERS -> setWorkers(msg.arg1)
                 Msg.SET_PERMITS -> setPermits(msg.arg1)
                 Msg.RESET_STATS -> resetStats()
+                Msg.SET_DET_SIZE -> {
+                    val ok = engine.reloadDetSize(msg.arg1)
+                    if (ok) {
+                        resetStats()
+                        Log.i(TAG, "det input size -> ${msg.arg1}")
+                    }
+                }
+                Msg.SET_VARIANT -> {
+                    val v = msg.data?.getString(Msg.K_VARIANT) ?: return
+                    val ok = engine.reload(v)
+                    if (ok) {
+                        resetStats()
+                        Log.i(TAG, "switched model variant -> $v")
+                    } else {
+                        Log.w(TAG, "switch variant failed: $v")
+                    }
+                }
                 else -> super.handleMessage(msg)
             }
         }
@@ -263,6 +280,8 @@ class InferenceService : Service() {
             avgRecMs = sumRec.get() / cnt,
             avgTotalMs = sumTotal.get() / cnt,
             activeThreads = Thread.activeCount(),
+            variant = engine.variant,
+            detInputSize = engine.detInputSize,
             galleryCount = engine.gallery.size(),
             threadNames = inferThreads
         )

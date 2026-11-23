@@ -70,6 +70,7 @@ class DebugActivity : AppCompatActivity() {
         sb.appendLine()
         sb.appendLine("════ 服务进程调度 ════")
         if (svc != null) {
+            sb.appendLine("模型变体    : ${svc.variant}   (fp32/int8/fp16 可切换)")
             sb.appendLine("工作线程数  : ${svc.workers}   (线程池: ${svc.threadNames.joinToString()})")
             sb.appendLine("信号量许可  : 可用 ${svc.permitsAvailable}/${svc.permitsTotal}   在途 ${svc.inFlight}")
             sb.appendLine("队列        : ${svc.queueLength}/${svc.queueCapacity}")

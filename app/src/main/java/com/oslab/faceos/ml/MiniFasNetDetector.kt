@@ -22,10 +22,11 @@ import java.nio.FloatBuffer
  */
 class MiniFasNetDetector(
     context: Context,
-    intraOpThreads: Int = 2
+    intraOpThreads: Int = 2,
+    private val assetName: String = DEFAULT_ASSET
 ) {
     companion object {
-        private const val MODEL_ASSET = "models/minifasnet_v2.onnx"
+        const val DEFAULT_ASSET = "models/minifasnet_v2.onnx"
         private const val INPUT_SIZE = 80
         val CLASS_NAMES = arrayOf("PRINT", "LIVE", "REPLAY")
     }
@@ -39,7 +40,7 @@ class MiniFasNetDetector(
 
     init {
         val t0 = System.currentTimeMillis()
-        val bytes = context.assets.open(MODEL_ASSET).use { it.readBytes() }
+        val bytes = context.assets.open(assetName).use { it.readBytes() }
         val opts = OrtSession.SessionOptions().apply {
             setIntraOpNumThreads(intraOpThreads)
             setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)

@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.graphics.PointF
+import android.util.Log
 import com.oslab.faceos.ipc.InferenceResult
 import com.oslab.faceos.ml.Config
 import com.oslab.faceos.ml.EdgeFaceRecognizer
@@ -25,16 +26,101 @@ import java.util.concurrent.atomic.AtomicReference
  *
  * 线程安全：session.run 可并发；人脸库内部加锁；最近一次特征/活体状态用 Atomic 保存。
  */
-class InferenceEngine(context: Context) {
+class InferenceEngine(context: Context, initialVariant: String = VARIANT_FP32) {
 
-    val detector = ScrfdDetector(context)
-    val recognizer = EdgeFaceRecognizer(context)
-    val livenessDetector = MiniFasNetDetector(context)
+    private val appContext = context.applicationContext
+
+    /** 当前模型变体：fp32 / int8 / fp16（模型侧优化对照实验用） */
+    @Volatile
+    var variant: String = initialVariant
+        private set
+
+    @Volatile
+    var detector: ScrfdDetector = ScrfdDetector(appContext, assetName = detAsset(initialVariant))
+        private set
+
+    @Volatile
+    var recognizer: EdgeFaceRecognizer = EdgeFaceRecognizer(appContext, assetName = recAsset(initialVariant))
+        private set
+
+    @Volatile
+    var livenessDetector: MiniFasNetDetector = MiniFasNetDetector(appContext, assetName = liveAsset(initialVariant))
+        private set
+
     val gallery = FaceGallery(context)
 
-    val loadTimeMs: Long = detector.modelLoadTimeMs + recognizer.modelLoadTimeMs + livenessDetector.modelLoadTimeMs
+    @Volatile
+    var loadTimeMs: Long = detector.modelLoadTimeMs + recognizer.modelLoadTimeMs + livenessDetector.modelLoadTimeMs
+        private set
+
+    /**
+     * 运行时切换模型变体（fp32 / int8 / fp16）。
+     * 用于"优化前后对照实验"：同一 App、同一测试条件，只换模型文件。
+     *
+     * 采用"先建新、再替换、最后关旧"的事务式切换：
+     * 若新变体加载失败（例如 int8 版本算子不被当前 ORT 支持），旧模型仍然可用，不会把服务搞挂。
+     */
+    @Synchronized
+    fun reload(newVariant: String): Boolean {
+        if (newVariant == variant) return true
+        return try {
+            val newDet = ScrfdDetector(appContext, inputSize = detInputSize, assetName = detAsset(newVariant))
+            val newRec = EdgeFaceRecognizer(appContext, assetName = recAsset(newVariant))
+            val newLive = MiniFasNetDetector(appContext, assetName = liveAsset(newVariant))
+
+            val oldDet = detector
+            val oldRec = recognizer
+            val oldLive = livenessDetector
+            detector = newDet
+            recognizer = newRec
+            livenessDetector = newLive
+            variant = newVariant
+            loadTimeMs = newDet.modelLoadTimeMs + newRec.modelLoadTimeMs + newLive.modelLoadTimeMs
+
+            try {
+                oldDet.close()
+                oldRec.close()
+                oldLive.close()
+            } catch (e: Throwable) {
+                // 忽略旧实例关闭异常
+            }
+            true
+        } catch (t: Throwable) {
+            Log.w(
+                "InferenceEngine",
+                "reload variant failed: $newVariant, keep current=$variant, reason=${t.javaClass.simpleName}: ${t.message}"
+            )
+            false
+        }
+    }
 
     val pid: Int = android.os.Process.myPid()
+
+    /** 检测网络输入尺寸（模型侧优化：640 → 480 → 320 可显著降低检测耗时） */
+    @Volatile
+    var detInputSize: Int = 640
+        private set
+
+    /** 运行时切换检测输入分辨率（不换模型文件，只改输入尺寸） */
+    @Synchronized
+    fun reloadDetSize(size: Int): Boolean {
+        val target = size.coerceIn(320, 640)
+        if (target == detInputSize) return true
+        return try {
+            val newDet = ScrfdDetector(appContext, inputSize = target, assetName = detAsset(variant))
+            val old = detector
+            detector = newDet
+            detInputSize = target
+            try {
+                old.close()
+            } catch (e: Throwable) {
+            }
+            true
+        } catch (t: Throwable) {
+            Log.w("InferenceEngine", "reload det size failed: $size, reason=${t.message}")
+            false
+        }
+    }
 
     private val lastEmbedding = AtomicReference<FloatArray?>(null)
     private val lastLive = AtomicBoolean(false)
@@ -192,6 +278,22 @@ class InferenceEngine(context: Context) {
 
     /** 供 UI 使用：把跨进程结果还原成绘制用的数据 */
     companion object {
+        const val VARIANT_FP32 = "fp32"
+        const val VARIANT_INT8 = "int8"
+        const val VARIANT_FP16 = "fp16"
+
+        private fun variantAsset(base: String, variant: String): String =
+            if (variant == VARIANT_FP32) base else base.replace(".onnx", "_$variant.onnx")
+
+        fun detAsset(variant: String): String =
+            variantAsset("models/det_500m.onnx", variant)
+
+        fun recAsset(variant: String): String =
+            variantAsset("models/edgeface_xxs.onnx", variant)
+
+        fun liveAsset(variant: String): String =
+            variantAsset("models/minifasnet_v2.onnx", variant)
+
         fun toDetections(result: InferenceResult): List<FaceDetection> {
             return (0 until result.faceCount).map { i ->
                 val kp = (0 until 5).map { p ->

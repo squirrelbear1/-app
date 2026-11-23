@@ -18,6 +18,8 @@ object Msg {
     const val SET_WORKERS = 6     // arg1
     const val SET_PERMITS = 7     // arg1
     const val RESET_STATS = 8
+    const val SET_VARIANT = 9      // data: variant(fp32/int8/fp16)
+    const val SET_DET_SIZE = 10    // arg1: detection input size (640/480/320)
 
     // 服务进程 -> 主进程
     const val RESULT = 20         // data: result (InferenceResult)
@@ -35,4 +37,6 @@ object Msg {
     const val K_OK = "ok"
     const val K_RESULT = "result"
     const val K_STATS = "stats"
+    const val K_VARIANT = "variant"
+    const val K_DET_SIZE = "detSize"
 }

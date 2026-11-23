@@ -20,6 +20,8 @@ data class StatsSnapshot(
     val avgRecMs: Long = 0,
     val avgTotalMs: Long = 0,
     val activeThreads: Int = 0,
+    val variant: String = "fp32",
+    val detInputSize: Int = 640,
     val galleryCount: Int = 0,
     val threadNames: Array<String> = emptyArray()
 ) : Parcelable

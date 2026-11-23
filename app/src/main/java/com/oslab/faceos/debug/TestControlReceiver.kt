@@ -36,6 +36,16 @@ class TestControlReceiver : BroadcastReceiver() {
                     DebugHub.actions?.setPermits?.invoke(permits)
                     Log.i(TAG, "setPermits=$permits")
                 }
+                val variant = intent.getStringExtra("variant")
+                if (!variant.isNullOrEmpty()) {
+                    DebugHub.actions?.setVariant?.invoke(variant)
+                    Log.i(TAG, "setVariant=$variant")
+                }
+                val detSize = intent.getIntExtra("detsize", 0)
+                if (detSize > 0) {
+                    DebugHub.actions?.setDetSize?.invoke(detSize)
+                    Log.i(TAG, "setDetSize=$detSize")
+                }
                 val mode = intent.getStringExtra("mode")
                 if (!mode.isNullOrEmpty()) {
                     context.getSharedPreferences("faceos", Context.MODE_PRIVATE)
