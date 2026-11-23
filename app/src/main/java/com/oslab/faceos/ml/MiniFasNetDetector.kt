@@ -27,7 +27,7 @@ class MiniFasNetDetector(
     companion object {
         private const val MODEL_ASSET = "models/minifasnet_v2.onnx"
         private const val INPUT_SIZE = 80
-        val CLASS_NAMES = arrayOf("LIVE", "PRINT", "REPLAY")
+        val CLASS_NAMES = arrayOf("PRINT", "LIVE", "REPLAY")
     }
 
     private val env: OrtEnvironment = OrtEnvironment.getEnvironment()
@@ -51,7 +51,7 @@ class MiniFasNetDetector(
     }
 
     fun detect(src: Bitmap, det: FaceDetection): LivenessResult? {
-        val crop = FaceAligner.cropWithMargin(src, det, Config.LIVENESS_CROP_MARGIN) ?: return null
+        val crop = FaceAligner.cropSquare(src, det, Config.LIVENESS_CROP_MARGIN) ?: return null
         val scaled = Bitmap.createScaledBitmap(crop, INPUT_SIZE, INPUT_SIZE, true)
         if (scaled !== crop) crop.recycle()
 
@@ -63,9 +63,9 @@ class MiniFasNetDetector(
         val input = FloatArray(3 * plane)
         for (i in 0 until plane) {
             val c = pixels[i]
-            input[i] = (c and 0xFF) / 255f                      // B
-            input[plane + i] = ((c shr 8) and 0xFF) / 255f       // G
-            input[2 * plane + i] = ((c shr 16) and 0xFF) / 255f  // R
+            input[i] = (c and 0xFF).toFloat()              // B（保持 0~255，官方实现不做归一化）
+            input[plane + i] = ((c shr 8) and 0xFF).toFloat()   // G
+            input[2 * plane + i] = ((c shr 16) and 0xFF).toFloat()  // R
         }
 
         val tensor = OnnxTensor.createTensor(
@@ -90,10 +90,10 @@ class MiniFasNetDetector(
             }
             for (i in 0..2) probs[i] /= sum
 
-            val fakeProb = probs[1] + probs[2]
-            val score = (1f - fakeProb).coerceIn(0f, 1f)
+            // 上游 test.py 语义：argmax==1 才是真人（Real Face），其余为攻击
             var top = 0
             for (i in 0..2) if (probs[i] > probs[top]) top = i
+            val score = probs[1].coerceIn(0f, 1f)
             return LivenessResult(
                 probs = probs,
                 score = score,

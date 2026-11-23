@@ -51,23 +51,31 @@
         <Button
             android:id="@+id/btnRegister"
             style="@style/Widget.FaceOS.SmallButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
             android:text="@string/btn_register" />
 
         <Button
             android:id="@+id/btnClear"
             style="@style/Widget.FaceOS.SmallButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
             android:layout_marginStart="6dp"
             android:text="@string/btn_clear" />
 
         <Button
             android:id="@+id/btnDebug"
             style="@style/Widget.FaceOS.SmallButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
             android:layout_marginStart="6dp"
             android:text="@string/btn_debug" />
 
         <Button
             android:id="@+id/btnMode"
             style="@style/Widget.FaceOS.SmallButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
             android:layout_marginStart="6dp"
             android:text="@string/btn_mode" />
     </LinearLayout>

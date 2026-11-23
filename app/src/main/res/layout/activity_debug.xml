@@ -45,17 +45,23 @@
             <Button
                 android:id="@+id/btnWorkers1"
                 style="@style/Widget.FaceOS.SmallButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 android:text="1" />
 
             <Button
                 android:id="@+id/btnWorkers2"
                 style="@style/Widget.FaceOS.SmallButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
                 android:text="2" />
 
             <Button
                 android:id="@+id/btnWorkers4"
                 style="@style/Widget.FaceOS.SmallButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
                 android:text="4" />
         </LinearLayout>
@@ -75,17 +81,23 @@
             <Button
                 android:id="@+id/btnPermits1"
                 style="@style/Widget.FaceOS.SmallButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 android:text="1" />
 
             <Button
                 android:id="@+id/btnPermits2"
                 style="@style/Widget.FaceOS.SmallButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
                 android:text="2" />
 
             <Button
                 android:id="@+id/btnPermits4"
                 style="@style/Widget.FaceOS.SmallButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
                 android:text="4" />
         </LinearLayout>
@@ -99,11 +111,15 @@
             <Button
                 android:id="@+id/btnReset"
                 style="@style/Widget.FaceOS.SmallButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 android:text="@string/debug_reset" />
 
             <Button
                 android:id="@+id/btnBack"
                 style="@style/Widget.FaceOS.SmallButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
                 android:text="@string/debug_back" />
         </LinearLayout>

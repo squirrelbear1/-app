@@ -40,6 +40,10 @@ class FrameAnalyzer(
             val h = image.height
             val packed = pack(bytes, w, h, plane.rowStride, plane.pixelStride)
 
+            // Binder 单次事务上限 1MB：640x480 RGBA=1.23MB 会直接抛 TransactionTooLargeException。
+            // 因此发送前统一缩放到 480x360（691,200 字节），并记录给服务端的实际帧尺寸。
+            val scaled = scaleToFit(packed, w, h, MAX_SEND_W, MAX_SEND_H)
+
             val now = System.nanoTime()
             if (lastTs != 0L) {
                 val inst = 1e9f / (now - lastTs).toFloat()
@@ -47,7 +51,7 @@ class FrameAnalyzer(
             }
             lastTs = now
 
-            sink.submit(packed, w, h, image.imageInfo.rotationDegrees, seq.incrementAndGet())
+            sink.submit(scaled.data, scaled.width, scaled.height, image.imageInfo.rotationDegrees, seq.incrementAndGet())
         } catch (t: Throwable) {
             Log.w("FrameAnalyzer", "frame dropped: ${t.javaClass.simpleName}")
         } finally {
@@ -56,6 +60,37 @@ class FrameAnalyzer(
     }
 
     val fps: Float get() = smoothFps
+
+    private class ScaledFrame(val data: ByteArray, val width: Int, val height: Int)
+
+    /** 最近邻缩放，保证宽高不超过 maxW/maxH（RGBA 4 字节/像素） */
+    private fun scaleToFit(src: ByteArray, w: Int, h: Int, maxW: Int, maxH: Int): ScaledFrame {
+        if (w <= maxW && h <= maxH) return ScaledFrame(src, w, h)
+        val scale = minOf(maxW.toFloat() / w, maxH.toFloat() / h)
+        val nw = (w * scale).toInt().coerceAtLeast(1)
+        val nh = (h * scale).toInt().coerceAtLeast(1)
+        val out = ByteArray(nw * nh * 4)
+        var dst = 0
+        for (y in 0 until nh) {
+            val sy = (y / scale).toInt().coerceIn(0, h - 1)
+            val row = sy * w
+            for (x in 0 until nw) {
+                val sx = (x / scale).toInt().coerceIn(0, w - 1)
+                val s = (row + sx) * 4
+                out[dst++] = src[s]
+                out[dst++] = src[s + 1]
+                out[dst++] = src[s + 2]
+                out[dst++] = src[s + 3]
+            }
+        }
+        return ScaledFrame(out, nw, nh)
+    }
+
+    companion object {
+        /** 跨进程传帧的最大尺寸：480*360*4 = 691,200 B < Binder 1 MB */
+        private const val MAX_SEND_W = 480
+        private const val MAX_SEND_H = 360
+    }
 
     private fun pack(src: ByteArray, w: Int, h: Int, rowStride: Int, pixelStride: Int): ByteArray {
         if (rowStride == w * 4 && pixelStride == 4) return src

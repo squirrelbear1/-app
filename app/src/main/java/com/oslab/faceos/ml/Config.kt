@@ -14,7 +14,7 @@ object Config {
     const val RECOGNITION_THRESHOLD = 0.40f
 
     /** 活体判定阈值：livenessScore = 1 - (p_print + p_replay) */
-    const val LIVENESS_THRESHOLD = 0.55f
+    const val LIVENESS_THRESHOLD = 0.50f
 
     /** MiniFASNet 裁剪倍数（官方 2.7_80x80 模型对应 2.7 倍） */
     const val LIVENESS_CROP_MARGIN = 2.7f

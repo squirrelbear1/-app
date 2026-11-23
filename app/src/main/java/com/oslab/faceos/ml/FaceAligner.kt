@@ -82,7 +82,24 @@ object FaceAligner {
     }
 
     /**
-     * 活体检测用的裁剪：以 bbox 中心为中心、按 [margin] 倍边长裁剪（MiniFASNet 官方使用 2.7 倍）。
+     * 活体检测用的裁剪：以 bbox 中心为中心、按 [margin] 倍**长边**裁剪成正方形
+     * （MiniFASNet 官方推理实现：`scale = min(imgH/boxH, imgW/boxW, 2.7)`，保持 bbox 长边比例）。
+     */
+    fun cropSquare(src: Bitmap, det: FaceDetection, margin: Float): Bitmap? {
+        val cx = det.centerX
+        val cy = det.centerY
+        val side = (maxOf(det.width, det.height) * margin)
+            .coerceAtMost(minOf(src.width, src.height).toFloat())
+        val half = side / 2f
+        val left = (cx - half).toInt().coerceIn(0, src.width - 1)
+        val top = (cy - half).toInt().coerceIn(0, src.height - 1)
+        val right = (cx + half).toInt().coerceIn(left + 1, src.width)
+        val bottom = (cy + half).toInt().coerceIn(top + 1, src.height)
+        return Bitmap.createBitmap(src, left, top, right - left, bottom - top)
+    }
+
+    /**
+     * 活体检测用的裁剪（旧版，非方形，保留以兼容对照实验）。
      */
     fun cropWithMargin(src: Bitmap, det: FaceDetection, margin: Float): Bitmap? {
         val cx = det.centerX

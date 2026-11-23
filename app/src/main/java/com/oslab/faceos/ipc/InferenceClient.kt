@@ -66,6 +66,9 @@ class InferenceClient(
 
     private val incoming = object : Handler(Looper.getMainLooper()) {
         override fun handleMessage(msg: Message) {
+            // 跨进程 Bundle 里的自有 Parcelable 必须显式指定 classLoader，
+            // 否则反序列化时默认走 BootClassLoader，抛 ClassNotFoundException
+            msg.data?.classLoader = StatsSnapshot::class.java.classLoader
             when (msg.what) {
                 Msg.RESULT -> {
                     val r = msg.data?.getParcelable<InferenceResult>(Msg.K_RESULT) ?: return
