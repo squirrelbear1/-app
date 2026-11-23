@@ -1,5 +1,7 @@
 package com.oslab.faceos.camera
 
+import android.os.SystemClock
+import android.os.Trace
 import android.util.Log
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
@@ -13,7 +15,10 @@ import java.util.concurrent.atomic.AtomicLong
 
 /** 帧的消费者：双进程模式下是 Binder 客户端，单进程模式下是本地推理引擎 */
 interface FrameSink {
-    fun submit(rgba: ByteArray, width: Int, height: Int, rotation: Int, seq: Long)
+    /**
+     * @param captureTsNs 相机回调进入分析器的时刻（elapsedRealtimeNanos）
+     */
+    fun submit(rgba: ByteArray, width: Int, height: Int, rotation: Int, seq: Long, captureTsNs: Long)
 }
 
 /**
@@ -29,9 +34,12 @@ class FrameAnalyzer(
 
     private val seq = AtomicLong()
     private var lastTs = 0L
+    @Volatile
     private var smoothFps = 0f
 
     override fun analyze(image: ImageProxy) {
+        Trace.beginSection("FaceOS-camera-callback")
+        val captureTsNs = SystemClock.elapsedRealtimeNanos()
         try {
             val plane = image.planes[0]
             val buffer = plane.buffer
@@ -41,11 +49,15 @@ class FrameAnalyzer(
 
             val w = image.width
             val h = image.height
-            val packed = pack(bytes, w, h, plane.rowStride, plane.pixelStride)
-
-            // Binder 单次事务上限 1MB：640x480 RGBA=1.23MB 会直接抛 TransactionTooLargeException。
-            // 因此发送前统一缩放到 480x360（691,200 字节），并记录给服务端的实际帧尺寸。
-            val scaled = scaleToFit(packed, w, h, MAX_SEND_W, MAX_SEND_H)
+            val scaled = try {
+                Trace.beginSection("FaceOS-pack-scale")
+                val packed = pack(bytes, w, h, plane.rowStride, plane.pixelStride)
+                // Binder 单次事务上限 1MB：640x480 RGBA=1.23MB 会直接抛 TransactionTooLargeException。
+                // 因此发送前统一缩放到 480x360（691,200 字节），并记录给服务端的实际帧尺寸。
+                scaleToFit(packed, w, h, MAX_SEND_W, MAX_SEND_H)
+            } finally {
+                Trace.endSection()
+            }
 
             val now = System.nanoTime()
             if (lastTs != 0L) {
@@ -54,10 +66,14 @@ class FrameAnalyzer(
             }
             lastTs = now
 
-            sink.submit(scaled.data, scaled.width, scaled.height, image.imageInfo.rotationDegrees, seq.incrementAndGet())
+            sink.submit(
+                scaled.data, scaled.width, scaled.height,
+                image.imageInfo.rotationDegrees, seq.incrementAndGet(), captureTsNs
+            )
         } catch (t: Throwable) {
             Log.w("FrameAnalyzer", "frame dropped: ${t.javaClass.simpleName}")
         } finally {
+            Trace.endSection()
             image.close()
         }
     }
@@ -139,14 +155,32 @@ class LocalFrameSink(
     val processedCount: Long get() = processed.get()
     val droppedCount: Long get() = dropped.get()
 
-    override fun submit(rgba: ByteArray, width: Int, height: Int, rotation: Int, seq: Long) {
+    fun reset() {
+        processed.set(0)
+        dropped.set(0)
+    }
+
+    override fun submit(rgba: ByteArray, width: Int, height: Int, rotation: Int, seq: Long, captureTsNs: Long) {
         try {
+            val submitTsNs = SystemClock.elapsedRealtimeNanos()
             pool.execute {
+                val startNs = SystemClock.elapsedRealtimeNanos()
+                Trace.beginSection("FaceOS-infer-local")
                 try {
-                    onResult(engine.analyze(rgba, width, height, rotation, seq))
+                    onResult(
+                        engine.analyze(
+                            rgba, width, height, rotation, seq,
+                            captureTsNs = captureTsNs,
+                            submitTsNs = submitTsNs,
+                            serviceRecvTsNs = submitTsNs,
+                            inferStartTsNs = startNs
+                        )
+                    )
                     processed.incrementAndGet()
                 } catch (t: Throwable) {
                     Log.w("LocalFrameSink", "inference failed: ${t.javaClass.simpleName}")
+                } finally {
+                    Trace.endSection()
                 }
             }
         } catch (t: Throwable) {

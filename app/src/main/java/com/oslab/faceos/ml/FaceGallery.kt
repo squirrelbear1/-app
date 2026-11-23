@@ -20,10 +20,22 @@ class FaceGallery(context: Context) {
 
     private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
+    /**
+     * 内存缓存。识别是逐帧调用的，如果每帧都从 SharedPreferences 解析 JSON，
+     * 会把解析时间算进“识别耗时”，并随模板数量线性变慢。
+     */
+    @Volatile
+    private var cache: List<Entry>? = null
+
     @Synchronized
     fun entries(): List<Entry> {
-        val raw = prefs.getString(KEY_ENTRIES, null) ?: return emptyList()
-        return try {
+        cache?.let { return it }
+        val raw = prefs.getString(KEY_ENTRIES, null)
+        if (raw == null) {
+            cache = emptyList()
+            return emptyList()
+        }
+        val list = try {
             val arr = JSONArray(raw)
             (0 until arr.length()).mapNotNull { i ->
                 val obj = arr.getJSONObject(i)
@@ -35,6 +47,8 @@ class FaceGallery(context: Context) {
         } catch (e: Exception) {
             emptyList()
         }
+        cache = list
+        return list
     }
 
     @Synchronized
@@ -56,11 +70,13 @@ class FaceGallery(context: Context) {
             arr.put(obj)
         }
         prefs.edit().putString(KEY_ENTRIES, arr.toString()).apply()
+        cache = null
     }
 
     @Synchronized
     fun remove(name: String) {
         val list = entries().filter { it.name != name }
+        cache = null
         if (list.isEmpty()) {
             prefs.edit().remove(KEY_ENTRIES).apply()
             return
@@ -77,6 +93,7 @@ class FaceGallery(context: Context) {
 
     @Synchronized
     fun clear() {
+        cache = null
         prefs.edit().remove(KEY_ENTRIES).apply()
     }
 

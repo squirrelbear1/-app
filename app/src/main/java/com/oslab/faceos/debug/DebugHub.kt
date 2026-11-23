@@ -18,9 +18,15 @@ object DebugHub {
         val submitted: Long = 0,
         val received: Long = 0,
         val reconnects: Long = 0,
+        val timeouts: Long = 0,
+        val lastResultAgeMs: Long = -1,
         val avgIpcMs: Long = 0,
         val fps: Float = 0f,
         val galleryCount: Int = 0,
+        val mainPssKb: Long = 0,
+        val servicePssKb: Long = 0,
+        val mainCpuPct: Float = 0f,
+        val serviceCpuPct: Float = 0f,
         val service: StatsSnapshot? = null
     )
 
@@ -29,7 +35,8 @@ object DebugHub {
         val setPermits: (Int) -> Unit,
         val resetStats: () -> Unit,
         val setVariant: (String) -> Unit,
-        val setDetSize: (Int) -> Unit
+        val setDetSize: (Int) -> Unit,
+        val killService: () -> Unit
     )
 
     @Volatile

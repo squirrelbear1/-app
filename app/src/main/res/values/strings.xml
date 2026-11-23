@@ -10,6 +10,8 @@
     <string name="debug_title">系统运行状态</string>
     <string name="debug_workers">推理工作线程数（CPU 调度对照）</string>
     <string name="debug_permits">信号量许可数（在途任务上限）</string>
+    <string name="debug_detsize">检测输入分辨率（模型侧优化）</string>
+    <string name="debug_kill">终止服务</string>
     <string name="debug_reset">重置统计</string>
     <string name="debug_back">返回</string>
 </resources>

@@ -56,6 +56,10 @@ class TestControlReceiver : BroadcastReceiver() {
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
                     )
                 }
+                if (intent.getBooleanExtra("kill", false)) {
+                    Log.i(TAG, "kill inference service")
+                    DebugHub.actions?.killService?.invoke()
+                }
             }
             ACTION_RESET -> {
                 DebugHub.actions?.resetStats?.invoke()

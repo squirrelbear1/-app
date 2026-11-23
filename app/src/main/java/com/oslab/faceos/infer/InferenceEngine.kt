@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.graphics.PointF
+import android.os.SystemClock
 import android.util.Log
 import com.oslab.faceos.ipc.InferenceResult
 import com.oslab.faceos.ml.Config
@@ -16,6 +17,7 @@ import com.oslab.faceos.ml.MiniFasNetDetector
 import com.oslab.faceos.ml.ScrfdDetector
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.locks.ReentrantReadWriteLock
 
 /**
  * 推理引擎：把三个模型的完整流水线封装成一个可复用组件。
@@ -24,11 +26,17 @@ import java.util.concurrent.atomic.AtomicReference
  *   - 双进程：由 :infer 进程的 [InferenceService] 持有；
  *   - 单进程：主进程直接持有（基线对照）。
  *
- * 线程安全：session.run 可并发；人脸库内部加锁；最近一次特征/活体状态用 Atomic 保存。
+ * 线程安全：
+ *   - [analyze] 持读锁；[reload]/[reloadDetSize]/[close] 持写锁，
+ *     避免“旧 session 正在推理时被关闭”的竞态；
+ *   - 人脸库内部加锁；活体平滑窗口单独加锁。
  */
 class InferenceEngine(context: Context, initialVariant: String = VARIANT_FP32) {
 
     private val appContext = context.applicationContext
+
+    /** analyze 与模型热切换之间的读写锁 */
+    private val modelLock = ReentrantReadWriteLock()
 
     /** 当前模型变体：fp32 / int8 / fp16（模型侧优化对照实验用） */
     @Volatile
@@ -53,6 +61,13 @@ class InferenceEngine(context: Context, initialVariant: String = VARIANT_FP32) {
     var loadTimeMs: Long = detector.modelLoadTimeMs + recognizer.modelLoadTimeMs + livenessDetector.modelLoadTimeMs
         private set
 
+    /** 检测网络输入尺寸（模型侧优化：640 → 480 → 320 可显著降低检测耗时） */
+    @Volatile
+    var detInputSize: Int = 640
+        private set
+
+    val pid: Int = android.os.Process.myPid()
+
     /**
      * 运行时切换模型变体（fp32 / int8 / fp16）。
      * 用于"优化前后对照实验"：同一 App、同一测试条件，只换模型文件。
@@ -60,9 +75,9 @@ class InferenceEngine(context: Context, initialVariant: String = VARIANT_FP32) {
      * 采用"先建新、再替换、最后关旧"的事务式切换：
      * 若新变体加载失败（例如 int8 版本算子不被当前 ORT 支持），旧模型仍然可用，不会把服务搞挂。
      */
-    @Synchronized
     fun reload(newVariant: String): Boolean {
         if (newVariant == variant) return true
+        modelLock.writeLock().lock()
         return try {
             val newDet = ScrfdDetector(appContext, inputSize = detInputSize, assetName = detAsset(newVariant))
             val newRec = EdgeFaceRecognizer(appContext, assetName = recAsset(newVariant))
@@ -76,6 +91,7 @@ class InferenceEngine(context: Context, initialVariant: String = VARIANT_FP32) {
             livenessDetector = newLive
             variant = newVariant
             loadTimeMs = newDet.modelLoadTimeMs + newRec.modelLoadTimeMs + newLive.modelLoadTimeMs
+            resetLivenessHistory()
 
             try {
                 oldDet.close()
@@ -91,21 +107,16 @@ class InferenceEngine(context: Context, initialVariant: String = VARIANT_FP32) {
                 "reload variant failed: $newVariant, keep current=$variant, reason=${t.javaClass.simpleName}: ${t.message}"
             )
             false
+        } finally {
+            modelLock.writeLock().unlock()
         }
     }
 
-    val pid: Int = android.os.Process.myPid()
-
-    /** 检测网络输入尺寸（模型侧优化：640 → 480 → 320 可显著降低检测耗时） */
-    @Volatile
-    var detInputSize: Int = 640
-        private set
-
     /** 运行时切换检测输入分辨率（不换模型文件，只改输入尺寸） */
-    @Synchronized
     fun reloadDetSize(size: Int): Boolean {
         val target = size.coerceIn(320, 640)
         if (target == detInputSize) return true
+        modelLock.writeLock().lock()
         return try {
             val newDet = ScrfdDetector(appContext, inputSize = target, assetName = detAsset(variant))
             val old = detector
@@ -119,117 +130,175 @@ class InferenceEngine(context: Context, initialVariant: String = VARIANT_FP32) {
         } catch (t: Throwable) {
             Log.w("InferenceEngine", "reload det size failed: $size, reason=${t.message}")
             false
+        } finally {
+            modelLock.writeLock().unlock()
         }
     }
 
     private val lastEmbedding = AtomicReference<FloatArray?>(null)
     private val lastLive = AtomicBoolean(false)
 
+    // ---- 活体连续帧平滑：5 帧窗口、多数投票 + 平均分，减少界面抖动 ----
+    private val liveLock = Any()
+    private val liveScores = ArrayDeque<Float>()
+    private val liveFlags = ArrayDeque<Boolean>()
+    private val liveWindow = 5
+
+    private fun smoothLiveness(raw: LivenessResult): LivenessResult {
+        synchronized(liveLock) {
+            liveScores.addLast(raw.score)
+            liveFlags.addLast(raw.live)
+            while (liveScores.size > liveWindow) liveScores.removeFirst()
+            while (liveFlags.size > liveWindow) liveFlags.removeFirst()
+
+            var sum = 0f
+            for (s in liveScores) sum += s
+            val avg = if (liveScores.isEmpty()) raw.score else sum / liveScores.size
+            val votes = liveFlags.count { it }
+            val stable = votes >= 3 && avg >= Config.LIVENESS_THRESHOLD
+            val label = when {
+                stable -> "LIVE"
+                raw.label == "LIVE" -> "UNSTABLE"
+                else -> raw.label
+            }
+            return LivenessResult(raw.probs, avg, stable, label)
+        }
+    }
+
+    private fun resetLivenessHistory() {
+        synchronized(liveLock) {
+            liveScores.clear()
+            liveFlags.clear()
+        }
+    }
+
     /**
      * @param rgba 紧凑排列的 RGBA_8888 像素（长度 = width*height*4）
      * @param rotationDegrees 相机帧需要旋转的角度（0/90/180/270）
+     * @param captureTsNs 相机回调时刻（elapsedRealtimeNanos，跨进程同一时基）
+     * @param submitTsNs 主进程投递时刻
+     * @param serviceRecvTsNs 服务进程收到帧的时刻
+     * @param inferStartTsNs 推理线程开始执行流水线的时刻
      */
     fun analyze(
         rgba: ByteArray,
         width: Int,
         height: Int,
         rotationDegrees: Int,
-        seq: Long
+        seq: Long,
+        captureTsNs: Long = 0,
+        submitTsNs: Long = 0,
+        serviceRecvTsNs: Long = 0,
+        inferStartTsNs: Long = 0
     ): InferenceResult {
-        val t0 = System.currentTimeMillis()
-        val raw = rgbaToBitmap(rgba, width, height)
-        val upright = rotate(raw, rotationDegrees)
-        if (upright !== raw) raw.recycle()
+        modelLock.readLock().lock()
+        try {
+            val entryNs = SystemClock.elapsedRealtimeNanos()
+            val t0 = SystemClock.elapsedRealtime()
 
-        val w = upright.width
-        val h = upright.height
-        val (detections, detMs) = detector.detect(upright)
+            val raw = rgbaToBitmap(rgba, width, height)
+            val upright = rotate(raw, rotationDegrees)
+            if (upright !== raw) raw.recycle()
 
-        var liveMs = 0L
-        var recMs = 0L
-        var largestLive: LivenessResult? = null
-        var embedding: FloatArray? = null
+            val w = upright.width
+            val h = upright.height
+            val (detections, detMs) = detector.detect(upright)
 
-        val n = detections.size
-        val names = Array(n) { "" }
-        val similarities = FloatArray(n)
-        val liveScores = FloatArray(n) { -1f }
-        val liveLabels = Array(n) { "未测" }
-        val hasLiveness = BooleanArray(n)
+            var liveMs = 0L
+            var recMs = 0L
+            var largestLive: LivenessResult? = null
+            var embedding: FloatArray? = null
 
-        // 只对面积最大的脸做人脸对齐 + 活体 + 识别（实验允许合理限制单人脸）
-        val largest = detections.maxByOrNull { it.width * it.height }
-        if (largest != null) {
-            val idx = detections.indexOfFirst { it === largest }
+            val n = detections.size
+            val names = Array(n) { "" }
+            val similarities = FloatArray(n)
+            val liveScores = FloatArray(n) { -1f }
+            val liveLabels = Array(n) { "未测" }
+            val hasLiveness = BooleanArray(n)
 
-            val tLive = System.currentTimeMillis()
-            val live = livenessDetector.detect(upright, largest)
-            liveMs = System.currentTimeMillis() - tLive
-            if (live != null) {
-                largestLive = live
-                liveScores[idx] = live.score
-                liveLabels[idx] = live.label
-                hasLiveness[idx] = true
-            }
+            // 只对面积最大的脸做人脸对齐 + 活体 + 识别（实验允许合理限制单人脸）
+            val largest = detections.maxByOrNull { it.width * it.height }
+            if (largest != null) {
+                val idx = detections.indexOfFirst { it === largest }
 
-            val tRec = System.currentTimeMillis()
-            val aligned = FaceAligner.align(upright, largest.keypoints)
-            if (aligned != null) {
-                val emb = recognizer.embed(aligned)
-                aligned.recycle()
-                if (emb != null) {
-                    embedding = emb
-                    val match = gallery.match(emb, Config.RECOGNITION_THRESHOLD)
-                    if (match != null) {
-                        names[idx] = match.name
-                        similarities[idx] = match.similarity
+                val tLive = SystemClock.elapsedRealtime()
+                val rawLive = livenessDetector.detect(upright, largest)
+                liveMs = SystemClock.elapsedRealtime() - tLive
+                if (rawLive != null) {
+                    val live = smoothLiveness(rawLive)
+                    largestLive = live
+                    liveScores[idx] = live.score
+                    liveLabels[idx] = live.label
+                    hasLiveness[idx] = true
+                }
+
+                val tRec = SystemClock.elapsedRealtime()
+                val aligned = FaceAligner.align(upright, largest.keypoints)
+                if (aligned != null) {
+                    val emb = recognizer.embed(aligned)
+                    aligned.recycle()
+                    if (emb != null) {
+                        embedding = emb
+                        val match = gallery.match(emb, Config.RECOGNITION_THRESHOLD)
+                        if (match != null) {
+                            names[idx] = match.name
+                            similarities[idx] = match.similarity
+                        }
                     }
                 }
+                recMs = SystemClock.elapsedRealtime() - tRec
             }
-            recMs = System.currentTimeMillis() - tRec
-        }
 
-        lastEmbedding.set(embedding)
-        lastLive.set(largestLive?.live == true)
-        upright.recycle()
+            lastEmbedding.set(embedding)
+            lastLive.set(largestLive?.live == true)
+            upright.recycle()
 
-        // 展平结果，减少 Binder 序列化开销
-        val boxes = FloatArray(n * 4)
-        val scores = FloatArray(n)
-        val kps = FloatArray(n * 10)
-        for (i in 0 until n) {
-            val d = detections[i]
-            boxes[i * 4] = d.x1
-            boxes[i * 4 + 1] = d.y1
-            boxes[i * 4 + 2] = d.x2
-            boxes[i * 4 + 3] = d.y2
-            scores[i] = d.score
-            for (p in 0 until 5) {
-                kps[i * 10 + p * 2] = d.keypoints.getOrNull(p)?.x ?: 0f
-                kps[i * 10 + p * 2 + 1] = d.keypoints.getOrNull(p)?.y ?: 0f
+            // 展平结果，减少 Binder 序列化开销
+            val boxes = FloatArray(n * 4)
+            val scores = FloatArray(n)
+            val kps = FloatArray(n * 10)
+            for (i in 0 until n) {
+                val d = detections[i]
+                boxes[i * 4] = d.x1
+                boxes[i * 4 + 1] = d.y1
+                boxes[i * 4 + 2] = d.x2
+                boxes[i * 4 + 3] = d.y2
+                scores[i] = d.score
+                for (p in 0 until 5) {
+                    kps[i * 10 + p * 2] = d.keypoints.getOrNull(p)?.x ?: 0f
+                    kps[i * 10 + p * 2 + 1] = d.keypoints.getOrNull(p)?.y ?: 0f
+                }
             }
-        }
 
-        return InferenceResult(
-            seq = seq,
-            width = w,
-            height = h,
-            faceCount = n,
-            boxes = boxes,
-            scores = scores,
-            kps = kps,
-            names = names,
-            similarities = similarities,
-            liveScores = liveScores,
-            liveLabels = liveLabels,
-            hasLiveness = hasLiveness,
-            detMs = detMs,
-            liveMs = liveMs,
-            recMs = recMs,
-            totalMs = System.currentTimeMillis() - t0,
-            servicePid = pid,
-            threadName = Thread.currentThread().name
-        )
+            val endNs = SystemClock.elapsedRealtimeNanos()
+            return InferenceResult(
+                seq = seq,
+                width = w,
+                height = h,
+                faceCount = n,
+                boxes = boxes,
+                scores = scores,
+                kps = kps,
+                names = names,
+                similarities = similarities,
+                liveScores = liveScores,
+                liveLabels = liveLabels,
+                hasLiveness = hasLiveness,
+                detMs = detMs,
+                liveMs = liveMs,
+                recMs = recMs,
+                totalMs = (endNs - entryNs) / 1_000_000,
+                servicePid = pid,
+                threadName = Thread.currentThread().name,
+                captureTsNs = captureTsNs,
+                submitTsNs = submitTsNs,
+                serviceRecvTsNs = serviceRecvTsNs,
+                inferStartTsNs = if (inferStartTsNs != 0L) inferStartTsNs else entryNs,
+                inferEndTsNs = endNs
+            )
+        } finally {
+            modelLock.readLock().unlock()
+        }
     }
 
     /** 用最近一帧最大人脸的特征注册（活体未通过时拒绝） */
@@ -241,15 +310,36 @@ class InferenceEngine(context: Context, initialVariant: String = VARIANT_FP32) {
         return true
     }
 
+    /** 删除单个模板（PDF 要求“模板删除”，不再只有“全部清空”） */
+    fun remove(name: String): Boolean {
+        if (name.isBlank()) return false
+        gallery.remove(name)
+        return true
+    }
+
     fun clearGallery(): Boolean {
         gallery.clear()
         return true
     }
 
     fun close() {
-        detector.close()
-        recognizer.close()
-        livenessDetector.close()
+        modelLock.writeLock().lock()
+        try {
+            try {
+                detector.close()
+            } catch (t: Throwable) {
+            }
+            try {
+                recognizer.close()
+            } catch (t: Throwable) {
+            }
+            try {
+                livenessDetector.close()
+            } catch (t: Throwable) {
+            }
+        } finally {
+            modelLock.writeLock().unlock()
+        }
     }
 
     // ---------------- 内部工具 ----------------

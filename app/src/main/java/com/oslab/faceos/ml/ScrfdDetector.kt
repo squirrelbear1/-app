@@ -3,6 +3,7 @@ package com.oslab.faceos.ml
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.PointF
+import android.os.SystemClock
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
@@ -27,8 +28,8 @@ import kotlin.math.sqrt
 class ScrfdDetector(
     context: Context,
     private val inputSize: Int = 640,
-    private val scoreThreshold: Float = 0.5f,
-    private val nmsThreshold: Float = 0.4f,
+    private val scoreThreshold: Float = Config.DETECTION_THRESHOLD,
+    private val nmsThreshold: Float = Config.NMS_THRESHOLD,
     intraOpThreads: Int = 2,
     private val assetName: String = DEFAULT_ASSET
 ) {
@@ -68,7 +69,7 @@ class ScrfdDetector(
      * @return 检测结果（坐标已还原到 bitmap 坐标系），以及本次推理耗时（毫秒）
      */
     fun detect(bitmap: Bitmap): Pair<List<FaceDetection>, Long> {
-        val t0 = System.currentTimeMillis()
+        val t0 = SystemClock.elapsedRealtime()
 
         // ---------- 1. 预处理：letterbox 缩放到 640x640，归一化为 NCHW ----------
         val srcW = bitmap.width
@@ -188,7 +189,7 @@ class ScrfdDetector(
             }
         }
 
-        val elapsed = System.currentTimeMillis() - t0
+        val elapsed = SystemClock.elapsedRealtime() - t0
         return Pair(nms(candidates), elapsed)
     }
 

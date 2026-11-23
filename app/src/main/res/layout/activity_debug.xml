@@ -3,7 +3,8 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#111318"
-    android:fillViewport="true">
+    android:fillViewport="true"
+    android:fitsSystemWindows="true">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -102,6 +103,42 @@
                 android:text="4" />
         </LinearLayout>
 
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/debug_detsize"
+            android:textColor="#FFFFFF" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnDet640"
+                style="@style/Widget.FaceOS.SmallButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="640" />
+
+            <Button
+                android:id="@+id/btnDet480"
+                style="@style/Widget.FaceOS.SmallButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="480" />
+
+            <Button
+                android:id="@+id/btnDet320"
+                style="@style/Widget.FaceOS.SmallButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="320" />
+        </LinearLayout>
+
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -114,6 +151,14 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/debug_reset" />
+
+            <Button
+                android:id="@+id/btnKill"
+                style="@style/Widget.FaceOS.SmallButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="@string/debug_kill" />
 
             <Button
                 android:id="@+id/btnBack"

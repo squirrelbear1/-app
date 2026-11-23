@@ -2,9 +2,11 @@ package com.oslab.faceos.ml
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.PointF
+import android.graphics.Rect
 
 /**
  * 基于 5 个关键点的人脸对齐（相似变换：旋转 + 均匀缩放 + 平移）。
@@ -84,18 +86,34 @@ object FaceAligner {
     /**
      * 活体检测用的裁剪：以 bbox 中心为中心、按 [margin] 倍**长边**裁剪成正方形
      * （MiniFASNet 官方推理实现：`scale = min(imgH/boxH, imgW/boxW, 2.7)`，保持 bbox 长边比例）。
+     *
+     * 贴边时不再把宽高截成不相等再拉伸，而是补黑边成正方形，避免活体输入变形。
      */
     fun cropSquare(src: Bitmap, det: FaceDetection, margin: Float): Bitmap? {
         val cx = det.centerX
         val cy = det.centerY
-        val side = (maxOf(det.width, det.height) * margin)
-            .coerceAtMost(minOf(src.width, src.height).toFloat())
-        val half = side / 2f
-        val left = (cx - half).toInt().coerceIn(0, src.width - 1)
-        val top = (cy - half).toInt().coerceIn(0, src.height - 1)
-        val right = (cx + half).toInt().coerceIn(left + 1, src.width)
-        val bottom = (cy + half).toInt().coerceIn(top + 1, src.height)
-        return Bitmap.createBitmap(src, left, top, right - left, bottom - top)
+        var side = maxOf(det.width, det.height) * margin
+        if (side < 1f) return null
+        side = side.coerceAtMost(minOf(src.width, src.height).toFloat())
+        val sideInt = side.toInt().coerceAtLeast(1)
+
+        val left = (cx - sideInt / 2f).toInt()
+        val top = (cy - sideInt / 2f).toInt()
+
+        val out = Bitmap.createBitmap(sideInt, sideInt, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(out)
+        canvas.drawColor(Color.BLACK)
+
+        val sx1 = left.coerceAtLeast(0)
+        val sy1 = top.coerceAtLeast(0)
+        val sx2 = (left + sideInt).coerceAtMost(src.width)
+        val sy2 = (top + sideInt).coerceAtMost(src.height)
+        if (sx2 > sx1 && sy2 > sy1) {
+            val srcRect = Rect(sx1, sy1, sx2, sy2)
+            val dstRect = Rect(sx1 - left, sy1 - top, sx2 - left, sy2 - top)
+            canvas.drawBitmap(src, srcRect, dstRect, Paint(Paint.FILTER_BITMAP_FLAG))
+        }
+        return out
     }
 
     /**

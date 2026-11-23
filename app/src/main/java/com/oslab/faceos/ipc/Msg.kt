@@ -20,12 +20,15 @@ object Msg {
     const val RESET_STATS = 8
     const val SET_VARIANT = 9      // data: variant(fp32/int8/fp16)
     const val SET_DET_SIZE = 10    // arg1: detection input size (640/480/320)
+    const val REMOVE = 11         // 删除单个模板，arg1=请求号，data: name
+    const val KILL = 12           // 调试：让服务进程自杀，用于故障隔离演示
 
     // 服务进程 -> 主进程
     const val RESULT = 20         // data: result (InferenceResult)
-    const val REGISTER_RESULT = 21 // data: ok(boolean), name(String)
-    const val CLEAR_RESULT = 22   // data: ok(boolean)
+    const val REGISTER_RESULT = 21 // data: ok(boolean), name(String), arg1=请求号
+    const val CLEAR_RESULT = 22   // data: ok(boolean), arg1=请求号
     const val STATS = 23          // data: stats (StatsSnapshot)
+    const val REMOVE_RESULT = 24  // data: ok(boolean), arg1=请求号
 
     // Bundle keys
     const val K_RGBA = "rgba"
@@ -39,4 +42,8 @@ object Msg {
     const val K_STATS = "stats"
     const val K_VARIANT = "variant"
     const val K_DET_SIZE = "detSize"
+    /** 相机回调时刻（SystemClock.elapsedRealtimeNanos） */
+    const val K_CAP_TS = "capTs"
+    /** 主进程投递时刻（SystemClock.elapsedRealtimeNanos） */
+    const val K_SUB_TS = "subTs"
 }

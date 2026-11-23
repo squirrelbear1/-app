@@ -11,14 +11,14 @@ import java.nio.FloatBuffer
  * MiniFASNetV2 静默活体检测（Presentation Attack Detection）。
  *
  * 模型：2.7_80x80_MiniFASNetV2（minivision-ai Silent-Face-Anti-Spoofing 官方权重转 ONNX）
- *   输入：[N, 3, 80, 80]，**BGR**，像素值 /255（范围 0~1）
+ *   输入：[N, 3, 80, 80]，**BGR**，像素值保持 0~255（官方 test.py 不做 /255 归一化）
  *   输出：[N, 3] logits，softmax 后三类概率
  *
- * 裁剪方式：以检测框中心、按 2.7 倍框大小裁剪（与官方一致，不做对齐 warp）。
- * 活体分数 = 1 - (打印攻击概率 + 屏幕重放攻击概率)。
+ * 裁剪方式：以检测框中心、按 2.7 倍框大小裁剪成正方形（与官方一致，不做对齐 warp）。
+ * 活体分数 = probs[1]（等价于 1 - (p_print + p_replay)）。
  *
- * 注意：三类顺序按社区导出说明为 [LIVE, PRINT, REPLAY]，
- * 真机标定时若发现顺序不符，只需调整 CLASS_NAMES 与分数计算，不影响其余链路。
+ * 类别顺序（上游 test.py 语义）：索引 1 = 真人，0/2 = 攻击；
+ * 最终阈值与顺序用真机采集的真人/打印/屏幕样本标定。
  */
 class MiniFasNetDetector(
     context: Context,
@@ -95,11 +95,18 @@ class MiniFasNetDetector(
             var top = 0
             for (i in 0..2) if (probs[i] > probs[top]) top = i
             val score = probs[1].coerceIn(0f, 1f)
+            val live = score >= Config.LIVENESS_THRESHOLD
+            // 注意：不能直接沿用 CLASS_NAMES[top]，否则“argmax=1 但置信度不足”时会返回 LIVE
+            val label = when {
+                live -> "LIVE"
+                top == 1 -> "UNSTABLE"
+                else -> CLASS_NAMES[top]
+            }
             return LivenessResult(
                 probs = probs,
                 score = score,
-                live = score >= Config.LIVENESS_THRESHOLD,
-                label = if (score >= Config.LIVENESS_THRESHOLD) "LIVE" else CLASS_NAMES[top]
+                live = live,
+                label = label
             )
         } finally {
             result.close()
