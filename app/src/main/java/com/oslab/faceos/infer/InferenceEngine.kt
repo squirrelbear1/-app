@@ -163,7 +163,7 @@ class InferenceEngine(context: Context, initialVariant: String = VARIANT_FP32) {
     private val liveLock = Any()
     private val liveScores = ArrayDeque<Float>()
     private val liveFlags = ArrayDeque<Boolean>()
-    private val liveWindow = 5
+    private val liveWindow = 7
 
     private fun smoothLiveness(raw: LivenessResult): LivenessResult {
         synchronized(liveLock) {
@@ -172,17 +172,18 @@ class InferenceEngine(context: Context, initialVariant: String = VARIANT_FP32) {
             while (liveScores.size > liveWindow) liveScores.removeFirst()
             while (liveFlags.size > liveWindow) liveFlags.removeFirst()
 
-            var sum = 0f
-            for (s in liveScores) sum += s
-            val avg = if (liveScores.isEmpty()) raw.score else sum / liveScores.size
+            // 用中位数而不是平均值：一两帧闭眼/侧脸不会把整段拉死
+            val sorted = liveScores.sorted()
+            val median = sorted[sorted.size / 2]
             val votes = liveFlags.count { it }
-            val stable = votes >= 3 && avg >= Config.LIVENESS_THRESHOLD
+            // 7 帧窗口至少 4 帧判活，降低单帧抖动造成的闪烁
+            val stable = votes >= 4 && median >= Config.LIVENESS_THRESHOLD
             val label = when {
                 stable -> "LIVE"
                 raw.label == "LIVE" -> "UNSTABLE"
                 else -> raw.label
             }
-            return LivenessResult(raw.probs, avg, stable, label)
+            return LivenessResult(raw.probs, median, stable, label)
         }
     }
 

@@ -98,7 +98,9 @@ object FaceAligner {
         val sideInt = side.toInt().coerceAtLeast(1)
 
         val left = (cx - sideInt / 2f).toInt()
+            .coerceIn(0, (src.width - sideInt).coerceAtLeast(0))
         val top = (cy - sideInt / 2f).toInt()
+            .coerceIn(0, (src.height - sideInt).coerceAtLeast(0))
 
         val out = Bitmap.createBitmap(sideInt, sideInt, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(out)

@@ -2,6 +2,7 @@ package com.oslab.faceos.ml
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.util.Log
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
@@ -35,6 +36,7 @@ class MiniFasNetDetector(
     private val session: OrtSession
     private val inputName: String
     private val outputName: String
+    private var debugCount = 0
 
     val modelLoadTimeMs: Long
 
@@ -53,6 +55,14 @@ class MiniFasNetDetector(
 
     fun detect(src: Bitmap, det: FaceDetection): LivenessResult? {
         val crop = FaceAligner.cropSquare(src, det, Config.LIVENESS_CROP_MARGIN) ?: return null
+        val debug = (++debugCount % 15 == 0)
+        if (debug) {
+            Log.i(
+                "MiniFAS",
+                "src=${src.width}x${src.height} det=(${det.x1.toInt()},${det.y1.toInt()})-(${det.x2.toInt()},${det.y2.toInt()})" +
+                    " crop=${crop.width}x${crop.height}"
+            )
+        }
         val scaled = Bitmap.createScaledBitmap(crop, INPUT_SIZE, INPUT_SIZE, true)
         if (scaled !== crop) crop.recycle()
 
@@ -101,6 +111,12 @@ class MiniFasNetDetector(
                 live -> "LIVE"
                 top == 1 -> "UNSTABLE"
                 else -> CLASS_NAMES[top]
+            }
+            if (debug) {
+                Log.i(
+                    "MiniFAS",
+                    "probs=${probs.contentToString()} score=$score label=$label"
+                )
             }
             return LivenessResult(
                 probs = probs,
