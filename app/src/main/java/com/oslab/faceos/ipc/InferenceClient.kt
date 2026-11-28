@@ -72,6 +72,7 @@ class InferenceClient(
     private val requestId = AtomicInteger(1)
     private val pendingRegisters = ConcurrentHashMap<Int, (Boolean) -> Unit>()
     private val pendingRemoves = ConcurrentHashMap<Int, (Boolean) -> Unit>()
+    private val pendingCaptures = ConcurrentHashMap<Int, (Boolean) -> Unit>()
 
     @Volatile
     private var pendingClear: ((Boolean) -> Unit)? = null
@@ -107,6 +108,10 @@ class InferenceClient(
                 Msg.REMOVE_RESULT -> {
                     val ok = msg.data?.getBoolean(Msg.K_OK) ?: false
                     pendingRemoves.remove(msg.arg1)?.invoke(ok)
+                }
+                Msg.CAPTURE_RESULT -> {
+                    val ok = msg.data?.getBoolean(Msg.K_OK) ?: false
+                    pendingCaptures.remove(msg.arg1)?.invoke(ok)
                 }
                 Msg.CLEAR_RESULT -> {
                     val ok = msg.data?.getBoolean(Msg.K_OK) ?: false
@@ -268,6 +273,37 @@ class InferenceClient(
         while (it.hasNext()) {
             if (it.next().value < cutoff) it.remove()
         }
+    }
+
+    /**
+     * 注册第一步：让服务端冻结 UI 看到的那一帧的特征/活体。
+     * 之后 registerFace() 只使用这份快照。
+     */
+    fun captureRegistration(seq: Long, onDone: (Boolean) -> Unit) {
+        val id = requestId.incrementAndGet()
+        pendingCaptures[id] = onDone
+        val m = serviceMessenger
+        if (m == null) {
+            pendingCaptures.remove(id)
+            onDone(false)
+            return
+        }
+        val msg = Message.obtain(null, Msg.CAPTURE).apply {
+            arg1 = id
+            data = Bundle().apply { putLong(Msg.K_SEQ, seq) }
+            replyTo = clientMessenger
+        }
+        try {
+            m.send(msg)
+        } catch (e: RemoteException) {
+            pendingCaptures.remove(id)
+            onDone(false)
+        }
+    }
+
+    /** 用户取消注册对话框：清掉服务端冻结的快照 */
+    fun cancelCapture() {
+        sendArg(Msg.CANCEL_CAPTURE, 0)
     }
 
     fun registerFace(name: String, onDone: (Boolean) -> Unit) {

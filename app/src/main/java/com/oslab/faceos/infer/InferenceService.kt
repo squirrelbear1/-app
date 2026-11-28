@@ -131,6 +131,8 @@ class InferenceService : Service() {
                 Msg.SUBMIT -> onFrame(msg)
                 Msg.SET_CALLBACK -> clientCallback = msg.replyTo
                 Msg.REGISTER -> onRegister(msg)
+                Msg.CAPTURE -> onCapture(msg)
+                Msg.CANCEL_CAPTURE -> if (engineReady) engine.clearPendingRegistration()
                 Msg.REMOVE -> onRemove(msg)
                 Msg.CLEAR -> onClear(msg)
                 Msg.GET_STATS -> reply(msg.replyTo ?: clientCallback, Msg.STATS, statsBundle())
@@ -240,6 +242,17 @@ class InferenceService : Service() {
         }
         // 必须回传 arg1（请求号），否则客户端无法把结果对应回 pendingRegisters
         reply(msg.replyTo ?: clientCallback, Msg.REGISTER_RESULT, out, msg.arg1)
+    }
+
+    /**
+     * 注册第一步：在用户点击“注册”的瞬间冻结当前帧特征。
+     * 后面的 REGISTER 只使用这份快照，不再看“最新一帧”的活体状态。
+     */
+    private fun onCapture(msg: Message) {
+        val seq = msg.data?.getLong(Msg.K_SEQ, 0L) ?: 0L
+        val ok = if (engineReady) engine.captureRegistration(seq) else false
+        val out = Bundle().apply { putBoolean(Msg.K_OK, ok) }
+        reply(msg.replyTo ?: clientCallback, Msg.CAPTURE_RESULT, out, msg.arg1)
     }
 
     private fun onRemove(msg: Message) {

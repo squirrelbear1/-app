@@ -22,6 +22,8 @@ object Msg {
     const val SET_DET_SIZE = 10    // arg1: detection input size (640/480/320)
     const val REMOVE = 11         // 删除单个模板，arg1=请求号，data: name
     const val KILL = 12           // 调试：让服务进程自杀，用于故障隔离演示
+    const val CAPTURE = 13        // 注册前冻结当前帧特征/活体，arg1=请求号，data: seq
+    const val CANCEL_CAPTURE = 14 // 取消注册对话框时清掉冻结快照
 
     // 服务进程 -> 主进程
     const val RESULT = 20         // data: result (InferenceResult)
@@ -29,6 +31,7 @@ object Msg {
     const val CLEAR_RESULT = 22   // data: ok(boolean), arg1=请求号
     const val STATS = 23          // data: stats (StatsSnapshot)
     const val REMOVE_RESULT = 24  // data: ok(boolean), arg1=请求号
+    const val CAPTURE_RESULT = 25 // data: ok(boolean), arg1=请求号
 
     // Bundle keys
     const val K_RGBA = "rgba"

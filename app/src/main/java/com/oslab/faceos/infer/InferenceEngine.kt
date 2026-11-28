@@ -15,7 +15,6 @@ import com.oslab.faceos.ml.FaceGallery
 import com.oslab.faceos.ml.LivenessResult
 import com.oslab.faceos.ml.MiniFasNetDetector
 import com.oslab.faceos.ml.ScrfdDetector
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
@@ -135,8 +134,30 @@ class InferenceEngine(context: Context, initialVariant: String = VARIANT_FP32) {
         }
     }
 
-    private val lastEmbedding = AtomicReference<FloatArray?>(null)
-    private val lastLive = AtomicBoolean(false)
+    /**
+     * 最近若干帧的“可注册特征”历史。
+     * UI 点击注册时带的是它看到的那一帧 seq，服务端按 seq 找回那一刻的特征和活体结果，
+     * 而不是用“当前最新帧”。这样用户输入姓名的几秒钟内活体掉了也不影响注册。
+     */
+    private data class FrameFeature(
+        val seq: Long,
+        val embedding: FloatArray,
+        val live: Boolean
+    )
+
+    private val featureLock = Any()
+    private val featureHistory = ArrayDeque<FrameFeature>()
+    private val featureHistoryMax = 16
+
+    /** 点击“注册”那一刻冻结下来的特征，确认姓名时只用这份快照 */
+    private data class RegistrationSnapshot(
+        val embedding: FloatArray,
+        val seq: Long,
+        val capturedAtMs: Long
+    )
+
+    private val pendingRegistration = AtomicReference<RegistrationSnapshot?>(null)
+    private val registrationTtlMs = 120_000L
 
     // ---- 活体连续帧平滑：5 帧窗口、多数投票 + 平均分，减少界面抖动 ----
     private val liveLock = Any()
@@ -249,8 +270,16 @@ class InferenceEngine(context: Context, initialVariant: String = VARIANT_FP32) {
                 recMs = SystemClock.elapsedRealtime() - tRec
             }
 
-            lastEmbedding.set(embedding)
-            lastLive.set(largestLive?.live == true)
+            if (embedding != null) {
+                synchronized(featureLock) {
+                    featureHistory.addLast(
+                        FrameFeature(seq, embedding, largestLive?.live == true)
+                    )
+                    while (featureHistory.size > featureHistoryMax) {
+                        featureHistory.removeFirst()
+                    }
+                }
+            }
             upright.recycle()
 
             // 展平结果，减少 Binder 序列化开销
@@ -301,13 +330,57 @@ class InferenceEngine(context: Context, initialVariant: String = VARIANT_FP32) {
         }
     }
 
-    /** 用最近一帧最大人脸的特征注册（活体未通过时拒绝） */
+    /**
+     * 点击注册按钮时调用：冻结当前最大人脸的特征。
+     *
+     * 为什么不能只校验 UI 的最新人脸结果：
+     *   用户还要输入姓名，等确认时相机已经又跑了几十帧，
+     *   活体可能已经掉了、人脸也可能换了人。这里把特征拷贝一份，
+     *   后面 register(name) 只用这份快照。
+     *
+     * @param requestedSeq UI 看到的那一帧序号；服务端最新帧必须不早于它
+     */
+    fun captureRegistration(requestedSeq: Long): Boolean {
+        val snap = synchronized(featureLock) {
+            if (requestedSeq > 0L) {
+                featureHistory.firstOrNull { it.seq == requestedSeq && it.live }
+            } else {
+                featureHistory.lastOrNull { it.live }
+            }
+        } ?: run {
+            Log.w("InferenceEngine", "captureRegistration failed: no live feature for uiSeq=$requestedSeq")
+            return false
+        }
+
+        pendingRegistration.set(
+            RegistrationSnapshot(
+                embedding = snap.embedding.copyOf(),
+                seq = snap.seq,
+                capturedAtMs = SystemClock.elapsedRealtime()
+            )
+        )
+        Log.i("InferenceEngine", "captureRegistration ok: uiSeq=$requestedSeq snapshotSeq=${snap.seq}")
+        return true
+    }
+
+    /** 用 captureRegistration 冻结的特征注册；快照过期/不存在则失败 */
     fun register(name: String): Boolean {
         if (name.isBlank()) return false
-        val emb = lastEmbedding.get() ?: return false
-        if (!lastLive.get()) return false
-        gallery.register(name, emb)
+        val snap = pendingRegistration.get() ?: return false
+        val age = SystemClock.elapsedRealtime() - snap.capturedAtMs
+        if (age > registrationTtlMs) {
+            pendingRegistration.set(null)
+            return false
+        }
+        gallery.register(name, snap.embedding)
+        pendingRegistration.set(null)
+        Log.i("InferenceEngine", "register ok: name=$name snapshotSeq=${snap.seq} age=${age}ms")
         return true
+    }
+
+    /** 用户取消注册对话框时调用，避免旧快照被后续请求误用 */
+    fun clearPendingRegistration() {
+        pendingRegistration.set(null)
     }
 
     /** 删除单个模板（PDF 要求“模板删除”，不再只有“全部清空”） */

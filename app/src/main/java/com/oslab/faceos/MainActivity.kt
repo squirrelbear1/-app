@@ -312,12 +312,46 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        // 关键：在点击这一刻让服务端冻结特征。
+        // 用户输入姓名期间相机还在跑，但不影响这份快照。
+        if (mode == MODE_DUAL) {
+            val c = client
+            if (c == null) {
+                Toast.makeText(this, "推理服务未连接，请稍后再试", Toast.LENGTH_SHORT).show()
+                return
+            }
+            c.captureRegistration(result.seq) { ok ->
+                runOnUiThread {
+                    if (ok) {
+                        showRegisterDialog(result, liveScore)
+                    } else {
+                        Toast.makeText(
+                            this,
+                            "冻结失败：服务端没有可用的活体特征，请正对镜头重试",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            }
+        } else {
+            val ok = engine?.captureRegistration(result.seq) ?: false
+            if (ok) {
+                showRegisterDialog(result, liveScore)
+            } else {
+                Toast.makeText(this, "冻结失败：请正对镜头重试", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    /** 显示姓名输入框；此时特征已经冻结，后面只用快照注册 */
+    private fun showRegisterDialog(result: InferenceResult, liveScore: Float) {
         val input = EditText(this).apply {
             hint = "输入姓名"
             setPadding(56, 32, 56, 16)
         }
         AlertDialog.Builder(this)
             .setTitle("注册人脸模板")
+            .setMessage("已定格第 ${result.seq} 帧，活体分 ${"%.2f".format(liveScore)}")
             .setView(input)
             .setPositiveButton("注册") { _, _ ->
                 val name = input.text.toString().trim()
@@ -330,14 +364,23 @@ class MainActivity : AppCompatActivity() {
                         .setTitle("同名模板已存在")
                         .setMessage("继续将覆盖「$name」的旧模板，是否继续？")
                         .setPositiveButton("覆盖") { _, _ -> doRegister(name) }
-                        .setNegativeButton("取消", null)
+                        .setNegativeButton("取消") { _, _ -> cancelPendingRegistration() }
                         .show()
                 } else {
                     doRegister(name)
                 }
             }
-            .setNegativeButton("取消", null)
+            .setNegativeButton("取消") { _, _ -> cancelPendingRegistration() }
+            .setOnCancelListener { cancelPendingRegistration() }
             .show()
+    }
+
+    private fun cancelPendingRegistration() {
+        if (mode == MODE_DUAL) {
+            client?.cancelCapture()
+        } else {
+            engine?.clearPendingRegistration()
+        }
     }
 
     private fun doRegister(name: String) {
@@ -352,7 +395,7 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     Toast.makeText(
                         this,
-                        if (success) "已注册：$name" else "注册失败：服务未就绪或活体未通过",
+                        if (success) "已注册：$name" else "注册失败：快照已失效，请重新点击注册",
                         Toast.LENGTH_SHORT
                     ).show()
                 }
@@ -361,7 +404,7 @@ class MainActivity : AppCompatActivity() {
             val ok = engine?.register(name) ?: false
             Toast.makeText(
                 this,
-                if (ok) "已注册：$name" else "注册失败：请先让活体通过",
+                if (ok) "已注册：$name" else "注册失败：快照已失效，请重新点击注册",
                 Toast.LENGTH_SHORT
             ).show()
         }
